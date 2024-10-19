@@ -8,26 +8,22 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// Use CORS middleware here
 app.use(cors());
 app.use(express.json());
 
-// Setup Multer for file uploads, files will be stored in 'uploads/' temporarily
+// Setup Multer for file uploads
 const upload = multer({ dest: 'uploads/' });
-
-console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 
 app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     console.log('Received request:', req.body);
 
-    const userMessage = req.body.message;
+    const userMessage = req.body.message;  // Make sure this is correctly parsed
     const file = req.file;
 
-    // Debugging Logs
+    // Debugging Logs to make sure message is being read
     console.log('User Message:', userMessage || 'No message provided');
     console.log('File:', file ? file.originalname : 'No file uploaded');
 
-    // Check for both missing message and missing file
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -91,11 +87,6 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
             }
         }
     }
-});
-
-// Test route
-app.get('/api/test', (req, res) => {
-    res.json({ message: 'Test route is working!' });
 });
 
 app.listen(PORT, () => {
