@@ -12,8 +12,8 @@ const PORT = process.env.PORT || 3002;
 app.use(cors());
 app.use(express.json());
 
-// Setup Multer for file uploads, files will be stored in 'uploads/' temporarily
-const upload = multer({ dest: 'uploads/' });
+// Use /tmp directory for uploads on Vercel (only writeable directory)
+const upload = multer({ dest: '/tmp' });
 
 console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 
@@ -24,7 +24,7 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     const userMessage = req.body.message;
     const file = req.file;
 
-    // Validate request payload
+    // Log for debugging purposes
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -32,8 +32,10 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
 
     let fileContent = '';
     if (file) {
+        console.log('File received:', file);
+
         try {
-            // Read file content
+            // Read file content from /tmp
             fileContent = fs.readFileSync(file.path, 'utf8');
             console.log('File content:', fileContent);
         } catch (readError) {
@@ -44,7 +46,7 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
 
     try {
         // Prepare messages array for OpenAI API
-        const messages = [{ role: "user", content: userMessage || '' }];
+        const messages = [{ role: "user", content: userMessage }];
 
         if (fileContent) {
             messages.push({ role: "user", content: `Here is the file content: ${fileContent}` });
@@ -79,18 +81,13 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     } finally {
         if (file) {
             try {
-                fs.unlinkSync(file.path);  // Delete the file from 'uploads' folder
+                fs.unlinkSync(file.path);  // Delete the file from /tmp directory
                 console.log('File deleted after processing');
             } catch (unlinkError) {
                 console.error('Error deleting the file:', unlinkError);
             }
         }
     }
-});
-
-// Test route
-app.get('/api/test', (req, res) => {
-    res.json({ message: 'Test route is working!' });
 });
 
 app.listen(PORT, () => {
