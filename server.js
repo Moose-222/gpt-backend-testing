@@ -74,19 +74,14 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
         console.error('Error during OpenAI request:', error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
     } finally {
-        // Cleanup: remove the uploaded file after processing
         if (file) {
             try {
-                fs.unlinkSync(file.path);
+                fs.unlinkSync(file.path);  // Delete the file from 'uploads' folder
             } catch (unlinkError) {
                 console.error('Error deleting the file:', unlinkError);
             }
         }
     }
-});
-
-app.get('/api/test', (req, res) => {
-    res.json({ message: 'Test route is working!' });
 });
 
 app.listen(PORT, () => {
