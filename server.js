@@ -7,6 +7,8 @@ const PORT = process.env.PORT || 3002;
 
 app.use(express.json());
 
+console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);  // Temporary for debugging
+
 app.post('/api/chatgpt', async (req, res) => {
     const userMessage = req.body.message;
     const apiKey = process.env.OPENAI_API_KEY;
