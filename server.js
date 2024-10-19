@@ -23,9 +23,11 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     const userMessage = req.body.message;
     const file = req.file;
 
-    console.log('User Message:', userMessage);
-    console.log('File:', file);
+    // Debugging Logs
+    console.log('User Message:', userMessage || 'No message provided');
+    console.log('File:', file ? file.originalname : 'No file uploaded');
 
+    // Check for both missing message and missing file
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -70,9 +72,11 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
 
         const reply = response.data.choices[0]?.message?.content;
         if (!reply) {
-            throw new Error('No valid response received from OpenAI');
+            console.error('No valid response received from OpenAI');
+            return res.status(500).json({ error: 'No valid response received from OpenAI' });
         }
 
+        console.log('OpenAI reply:', reply);
         res.json({ reply });
     } catch (error) {
         console.error('Error during OpenAI request:', error.response ? error.response.data : error.message);
@@ -81,11 +85,17 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
         if (file) {
             try {
                 fs.unlinkSync(file.path);  // Delete the file from 'uploads' folder
+                console.log('File deleted after processing');
             } catch (unlinkError) {
                 console.error('Error deleting the file:', unlinkError);
             }
         }
     }
+});
+
+// Test route
+app.get('/api/test', (req, res) => {
+    res.json({ message: 'Test route is working!' });
 });
 
 app.listen(PORT, () => {
