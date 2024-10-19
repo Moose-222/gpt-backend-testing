@@ -8,22 +8,23 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// Use CORS middleware
 app.use(cors());
 app.use(express.json());
 
-// Setup Multer for file uploads
+// Setup Multer for file uploads, files will be stored in 'uploads/' temporarily
 const upload = multer({ dest: 'uploads/' });
 
-app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
-    console.log('Received request:', req.body);
+console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 
-    const userMessage = req.body.message;  // Make sure this is correctly parsed
+app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
+    console.log('Received request body:', req.body);
+    console.log('Received file:', req.file ? req.file.originalname : 'No file uploaded');
+
+    const userMessage = req.body.message;
     const file = req.file;
 
-    // Debugging Logs to make sure message is being read
-    console.log('User Message:', userMessage || 'No message provided');
-    console.log('File:', file ? file.originalname : 'No file uploaded');
-
+    // Log for debugging purposes
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -34,7 +35,7 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
         console.log('File received:', file);
 
         try {
-            // Read file content assuming it's text for now
+            // Read file content
             fileContent = fs.readFileSync(file.path, 'utf8');
             console.log('File content:', fileContent);
         } catch (readError) {
