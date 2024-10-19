@@ -5,6 +5,9 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
+const cors = require('cors');
+app.use(cors());
+
 
 app.use(express.json());
 
