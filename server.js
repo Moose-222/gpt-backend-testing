@@ -2,6 +2,7 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');  // Import CORS
 const multer = require('multer'); // Import Multer for file uploads
+const fs = require('fs'); // Import fs to handle file reading
 require('dotenv').config();
 
 const app = express();
@@ -11,8 +12,8 @@ const PORT = process.env.PORT || 3002;
 app.use(cors());
 app.use(express.json());
 
-// Setup Multer for file uploads
-const upload = multer({ dest: 'uploads/' }); // Files will be temporarily stored in 'uploads/' folder
+// Setup Multer for file uploads, files will be stored in 'uploads/' temporarily
+const upload = multer({ dest: 'uploads/' });
 
 console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);  // Debugging API key
 
@@ -26,19 +27,30 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
         return res.status(400).json({ error: 'Message or file is required' });
     }
 
-    // If there is a file, handle it (for now, we just log the file details)
+    let fileContent = '';
     if (file) {
         console.log('File received:', file);
-        // You can add logic here to process the file, like reading its contents or sending it to an API.
+        
+        // Read file content assuming it is text, modify for other file types as needed
+        fileContent = fs.readFileSync(file.path, 'utf8');
+        console.log('File content:', fileContent);
     }
 
     try {
-        // Continue with OpenAI API call
+        // Preparing messages array for OpenAI API
+        const messages = [{ role: "user", content: userMessage }];
+        
+        if (fileContent) {
+            // Append file content to the user message if file exists
+            messages.push({ role: "user", content: `Here is the file content: ${fileContent}` });
+        }
+
+        // Call OpenAI API
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
                 model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: userMessage }],
+                messages: messages,
             },
             {
                 headers: {
@@ -53,6 +65,11 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     } catch (error) {
         console.error(error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Something went wrong', details: error.message });
+    } finally {
+        // Cleanup: remove the uploaded file after processing
+        if (file) {
+            fs.unlinkSync(file.path);  // Delete the file from 'uploads' folder
+        }
     }
 });
 
