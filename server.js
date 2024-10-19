@@ -13,10 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // Setup Multer for file uploads, files will be stored in 'uploads/' temporarily
-const upload = multer({
-    dest: 'uploads/',
-    limits: { fileSize: 10 * 1024 * 1024 } // Limit file size to 10MB for testing
-});
+const upload = multer({ dest: 'uploads/' });
 
 console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 
@@ -27,7 +24,7 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     const userMessage = req.body.message;
     const file = req.file;
 
-    // Error handling: if neither a message nor file is provided
+    // Validate request payload
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -36,10 +33,9 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     let fileContent = '';
     if (file) {
         try {
-            console.log('File received, processing:', file);
-            // Read file content and handle potential errors
+            // Read file content
             fileContent = fs.readFileSync(file.path, 'utf8');
-            console.log('File content successfully read:', fileContent);
+            console.log('File content:', fileContent);
         } catch (readError) {
             console.error('Error reading file:', readError);
             return res.status(500).json({ error: 'Error reading the file', details: readError.message });
@@ -48,13 +44,13 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
 
     try {
         // Prepare messages array for OpenAI API
-        const messages = [{ role: "user", content: userMessage }];
+        const messages = [{ role: "user", content: userMessage || '' }];
 
         if (fileContent) {
             messages.push({ role: "user", content: `Here is the file content: ${fileContent}` });
         }
 
-        // Make a POST request to the OpenAI API
+        // Call OpenAI API
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
@@ -77,7 +73,6 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
 
         console.log('OpenAI reply:', reply);
         res.json({ reply });
-
     } catch (error) {
         console.error('Error during OpenAI request:', error.response ? error.response.data : error.message);
         res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
@@ -91,6 +86,11 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
             }
         }
     }
+});
+
+// Test route
+app.get('/api/test', (req, res) => {
+    res.json({ message: 'Test route is working!' });
 });
 
 app.listen(PORT, () => {
