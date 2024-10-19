@@ -23,6 +23,7 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     const userMessage = req.body.message;
     const file = req.file; // Get the uploaded file
 
+    // Validate the request: either a message or a file must be provided
     if (!userMessage && !file) {
         return res.status(400).json({ error: 'Message or file is required' });
     }
@@ -31,17 +32,22 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
     if (file) {
         console.log('File received:', file);
         
-        // Read file content assuming it is text, modify for other file types as needed
-        fileContent = fs.readFileSync(file.path, 'utf8');
-        console.log('File content:', fileContent);
+        try {
+            // Attempt to read file content assuming it is text
+            fileContent = fs.readFileSync(file.path, 'utf8');
+            console.log('File content:', fileContent);
+        } catch (readError) {
+            console.error('Error reading file:', readError);
+            return res.status(500).json({ error: 'Error reading the file', details: readError.message });
+        }
     }
 
     try {
-        // Preparing messages array for OpenAI API
+        // Prepare messages array for OpenAI API
         const messages = [{ role: "user", content: userMessage }];
         
         if (fileContent) {
-            // Append file content to the user message if file exists
+            // Append file content to the user message if a file exists
             messages.push({ role: "user", content: `Here is the file content: ${fileContent}` });
         }
 
@@ -60,15 +66,23 @@ app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
             }
         );
 
-        const reply = response.data.choices[0].message.content;
+        const reply = response.data.choices[0]?.message?.content;
+        if (!reply) {
+            throw new Error('No valid response received from OpenAI');
+        }
+        
         res.json({ reply });
     } catch (error) {
-        console.error(error.response ? error.response.data : error.message);
-        res.status(500).json({ error: 'Something went wrong', details: error.message });
+        console.error('Error during OpenAI request:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
     } finally {
-        // Cleanup: remove the uploaded file after processing
+        // Cleanup: remove the uploaded file after processing to free up space
         if (file) {
-            fs.unlinkSync(file.path);  // Delete the file from 'uploads' folder
+            try {
+                fs.unlinkSync(file.path);  // Delete the file from 'uploads' folder
+            } catch (unlinkError) {
+                console.error('Error deleting the file:', unlinkError);
+            }
         }
     }
 });
