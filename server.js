@@ -1,3 +1,4 @@
+process.env.GRPC_SSL_CIPHER_SUITES = 'HIGH+ECDSA';
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
