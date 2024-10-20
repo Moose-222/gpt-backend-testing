@@ -11,13 +11,14 @@ const PORT = process.env.PORT || 3002;
 
 // Set the Vision API URL using the API key
 let visionApiUrl = '';
-if (process.env.GOOGLE_API_KEY) {
-    visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.GOOGLE_API_KEY}`;
+if (process.env.VISION_API_KEY) {
+    visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
     console.log('Vision API URL set:', visionApiUrl);
 } else {
     console.error('Google Vision API Key is missing');
     process.exit(1);  // Exit if we don't have the API key
 }
+
 
 // Use CORS middleware
 app.use(cors());
