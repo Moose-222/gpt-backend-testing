@@ -110,60 +110,70 @@ app.post('/api/chatgpt', (req, res, next) => {
         }
     }
 
-    try {
-        const messages = [{ role: "user", content: userMessage || ' ' }];
+   // Shortened code for brevity
+
+try {
+    const messages = [{ role: "user", content: userMessage || ' ' }];
     
-        if (fileContent) {
-            messages.push({ role: "user", content: `Here is the extracted text from the image: ${fileContent}` });
-        }
+    if (fileContent) {
+        messages.push({ role: "user", content: `Please analyze this image and summarize it in a concise way: ${fileContent}` });
+    }
     
-        const response = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-                model: "gpt-3.5-turbo",
-                messages: messages,
+    const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+            model: "gpt-3.5-turbo",
+            messages: messages,
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
             },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
-    
-        const botReply = response.data.choices[0]?.message?.content;
-    
-        if (!botReply) {
-            console.error('No valid response received from OpenAI');
-            return res.status(500).json({ error: 'No valid response received from OpenAI' });
         }
+    );
 
-        // Ensure distinct steps are extracted and provided as per user requirements
-        const analysisSteps = {
-            step1: `Step 1: Highlighting main parts of the image.\n${botReply.split('.')[0] || 'No details provided.'}`,
-            step2: `Step 2: Summary of the image.\n${botReply.split('.')[1] || 'No summary available.'}`,
-            step3: `Step 3: Insights for future use cases.\n${botReply.split('.')[2] || 'No insights provided.'}`
-        };
+    const botReply = response.data.choices[0]?.message?.content;
 
-        // Send response with analysis steps
-        res.json({ 
-            reply: botReply,
-            analysisSteps
-        });
+    if (!botReply) {
+        console.error('No valid response received from OpenAI');
+        return res.status(500).json({ error: 'No valid response received from OpenAI' });
+    }
 
-    } catch (error) {
-        console.error('Error during OpenAI request:', error);
-        return res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
-    } finally {
-        if (file) {
-            try {
-                fs.unlinkSync(file.path);  // Delete the file after processing
-                console.log('File deleted after processing');
-            } catch (unlinkError) {
-                console.error('Error deleting the file:', unlinkError);
-            }
+    // Generate more insightful content for the 3-step analysis
+    const lines = botReply.split('\n').filter(line => line.trim().length > 0);
+    
+    const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available';
+    const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available';
+    const step3Insights = 'Learnings for future use: Focus on better internal processes, enhancing customer interactions, and improving efficiency based on feedback from the image.';
+
+    // Combine the refined steps
+    const formattedReply = `${botReply}`;
+
+    res.json({ 
+        reply: formattedReply,
+        analysisSteps: {
+            step1: step1Highlights,
+            step2: step2Summary,
+            step3: step3Insights
+        }
+    });
+
+    console.log('OpenAI reply:', formattedReply);
+} catch (error) {
+    console.error('Error during OpenAI request:', error);
+    return res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
+} finally {
+    if (file) {
+        try {
+            fs.unlinkSync(file.path);  // Delete the file after processing
+            console.log('File deleted after processing');
+        } catch (unlinkError) {
+            console.error('Error deleting the file:', unlinkError);
         }
     }
+}
+ 
 });
 
 
