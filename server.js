@@ -119,16 +119,23 @@ app.post('/api/chatgpt', (req, res, next) => {
             return res.status(500).json({ error: 'No valid response received from OpenAI' });
         }
     
-        // Add the logic for image analysis
-        const imageAnalysisStep1 = "Image analysis step 1: Detected key elements of the diagram."; 
-        const imageAnalysisStep2 = "Image analysis step 2: Noticed patterns in the structure.";  
-        const imageAnalysisStep3 = "Image analysis step 3: Analyzed key text and labels.";        
+        // Add the logic for image analysis steps
+        const imageAnalysisStep1 = "Step 1: Highlighting main parts of the image.";
+        const imageAnalysisStep2 = "Step 2: Summary of the image.";
+        const imageAnalysisStep3 = "Step 3: Insights learned for future use from the image.";
     
         // Combine bot reply with the image analysis steps
         const formattedReply = `${botReply}###${imageAnalysisStep1}###${imageAnalysisStep2}###${imageAnalysisStep3}`;
         
         // Send the formatted reply with image analysis to the frontend
-        res.json({ reply: formattedReply });
+        res.json({ 
+            reply: formattedReply,
+            imageAnalysis: {
+                step1: imageAnalysisStep1,
+                step2: imageAnalysisStep2,
+                step3: imageAnalysisStep3
+            }
+        });
     
         console.log('OpenAI reply:', formattedReply);
     } catch (error) {
