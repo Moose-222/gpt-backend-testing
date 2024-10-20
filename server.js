@@ -3,7 +3,7 @@ const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
-const tesseract = require('tesseract.js');  // Add Tesseract for OCR
+const tesseract = require('tesseract.js'); // Add Tesseract for OCR
 require('dotenv').config();
 
 const app = express();
@@ -13,11 +13,17 @@ const PORT = process.env.PORT || 3002;
 app.use(cors());
 app.use(express.json());
 
-// Use /tmp directory for uploads on Vercel (only writeable directory)
+// Configure Multer to use /tmp for file uploads on Vercel
 const upload = multer({
     dest: '/tmp',
-    limits: { fileSize: 10 * 1024 * 1024 } // Set file size limit (10MB in this case)
+    limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
 });
+
+// Set Tesseract worker options to ensure correct paths for WASM files
+tesseract.workerOptions = {
+    workerPath: '/node_modules/tesseract.js/dist/worker.min.js',
+    corePath: 'https://unpkg.com/tesseract.js-core/tesseract-core.wasm.js',
+};
 
 console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 
@@ -51,7 +57,7 @@ app.post('/api/chatgpt', (req, res, next) => {
         console.log('File received:', file);
 
         try {
-            // Perform OCR if the file is an image
+            // Perform OCR on the file if it's an image
             const ocrResult = await tesseract.recognize(file.path);
             fileContent = ocrResult.data.text; // Extracted text from the image
             console.log('Extracted text from image:', fileContent);
@@ -104,7 +110,7 @@ app.post('/api/chatgpt', (req, res, next) => {
     } finally {
         if (file) {
             try {
-                fs.unlinkSync(file.path);  // Delete the file from /tmp directory after processing
+                fs.unlinkSync(file.path); // Delete the file from /tmp directory after processing
                 console.log('File deleted after processing');
             } catch (unlinkError) {
                 console.error('Error deleting the file:', unlinkError);
