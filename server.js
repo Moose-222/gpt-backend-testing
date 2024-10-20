@@ -80,27 +80,20 @@ app.post('/api/chatgpt', (req, res, next) => {
             const imageBuffer = fs.readFileSync(file.path); // Read the image file
             const imageBase64 = imageBuffer.toString('base64'); // Convert it to base64
 
-            // Define the request payload for Google Vision API
-            const visionRequestPayload = {
+            // Make the request to Google Vision API using REST
+            const visionResponse = await axios.post(visionApiUrl, {
                 requests: [
                     {
                         image: {
-                            content: imageBase64, // The base64-encoded image
+                            content: imageBase64,
                         },
                         features: [
                             {
-                                type: 'TEXT_DETECTION', // Specify the feature type (e.g., TEXT_DETECTION)
+                                type: 'TEXT_DETECTION', // You can change this to other features like LABEL_DETECTION, etc.
                             },
                         ],
                     },
                 ],
-            };
-
-            // Make the request to Google Vision API using REST
-            const visionResponse = await axios.post(visionApiUrl, visionRequestPayload, {
-                headers: {
-                    'Content-Type': 'application/json',
-                },
             });
 
             const detections = visionResponse.data.responses[0].textAnnotations;
