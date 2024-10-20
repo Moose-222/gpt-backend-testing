@@ -149,13 +149,14 @@ app.post('/api/chatgpt', (req, res, next) => {
         const formattedReply = `${botReply}`;
 
         res.json({ 
-            reply: formattedReply,
+            reply: formattedReply,  // Main reply from GPT
             imageAnalysis: {
-                step1: step1Highlights,
-                step2: step2Summary,
-                step3: step3Insights
+                step1: step1Highlights || "Key highlights not available.",
+                step2: step2Summary || "Summary not available.",
+                step3: step3Insights || "Learnings for future use not available."
             }
         });
+        
 
         console.log('OpenAI reply:', formattedReply);
     } catch (error) {
