@@ -21,20 +21,22 @@ if (process.env.VISION_API_KEY_JSON) {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilePath; // Set the credentials environment variable
     } catch (err) {
         console.error('Error writing Google Vision API keyfile:', err);
+        process.exit(1); // Exit if we can't write the keyfile
     }
 } else {
     console.error('Google Vision API credentials (JSON) are missing');
+    process.exit(1);  // Exit if we don't have the credentials
 }
 
 // Set the Vision API URL using the API key
-let visionApiUrl;
+let visionApiUrl = '';
 if (process.env.VISION_API_KEY) {
     visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
     console.log('Vision API URL set:', visionApiUrl);
 } else {
     console.error('Google Vision API Key is missing');
+    process.exit(1);  // Exit if we don't have the API key
 }
-
 
 // Use CORS middleware
 app.use(cors());
