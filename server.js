@@ -48,6 +48,25 @@ app.post('/api/chatgpt', (req, res, next) => {
     const userMessage = req.body.message;
     const file = req.file;
 
+    // Step 1: Handle the scenario where the user sends a simple message (e.g., "hi")
+    if (!file && userMessage.toLowerCase().trim() === 'hi') {
+        const response = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: userMessage }]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+            }
+        );
+        const botReply = response.data.choices[0]?.message?.content;
+        return res.json({ reply: botReply });
+    }
+
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -97,13 +116,7 @@ app.post('/api/chatgpt', (req, res, next) => {
         if (fileContent) {
             messages.push({ role: "user", content: `Here is the extracted text from the image: ${fileContent}` });
         }
-        
-        // Explicitly ask GPT-3 to derive insights for future use
-        messages.push({ 
-            role: "system", 
-            content: "Step 3: Based on this image and the extracted text, what insights and lessons can be learned that would be useful in similar scenarios or future use cases?" 
-        });
-
+    
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
@@ -124,26 +137,20 @@ app.post('/api/chatgpt', (req, res, next) => {
             console.error('No valid response received from OpenAI');
             return res.status(500).json({ error: 'No valid response received from OpenAI' });
         }
-    
-        // Add the logic for image analysis steps
-        const imageAnalysisStep1 = "Step 1: Highlighting main parts of the image.";
-        const imageAnalysisStep2 = "Step 2: Summary of the image.";
-        const imageAnalysisStep3 = "Step 3: " + botReply.split('###')[1]; // Use the insights GPT generates.
-    
-        // Combine bot reply with the image analysis steps
-        const formattedReply = `${botReply.split('###')[0]}###${imageAnalysisStep1}###${imageAnalysisStep2}###${imageAnalysisStep3}`;
-        
-        // Send the formatted reply with image analysis to the frontend
+
+        // Ensure distinct steps are extracted and provided as per user requirements
+        const analysisSteps = {
+            step1: `Step 1: Highlighting main parts of the image.\n${botReply.split('.')[0] || 'No details provided.'}`,
+            step2: `Step 2: Summary of the image.\n${botReply.split('.')[1] || 'No summary available.'}`,
+            step3: `Step 3: Insights for future use cases.\n${botReply.split('.')[2] || 'No insights provided.'}`
+        };
+
+        // Send response with analysis steps
         res.json({ 
-            reply: formattedReply,
-            imageAnalysis: {
-                step1: imageAnalysisStep1,
-                step2: imageAnalysisStep2,
-                step3: imageAnalysisStep3
-            }
+            reply: botReply,
+            analysisSteps
         });
-    
-        console.log('OpenAI reply:', formattedReply);
+
     } catch (error) {
         console.error('Error during OpenAI request:', error);
         return res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
@@ -158,6 +165,7 @@ app.post('/api/chatgpt', (req, res, next) => {
         }
     }
 });
+
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
