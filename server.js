@@ -37,6 +37,7 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
 });
 
+// Endpoint for handling file upload and message
 app.post('/api/chatgpt', (req, res, next) => {
     upload.single('file')(req, res, function (err) {
         if (err instanceof multer.MulterError) {
@@ -55,6 +56,7 @@ app.post('/api/chatgpt', (req, res, next) => {
     const userMessage = req.body.message;
     const file = req.file;
 
+    // Check if both message and file are missing
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
         return res.status(400).json({ error: 'Message or file is required' });
@@ -65,10 +67,11 @@ app.post('/api/chatgpt', (req, res, next) => {
         console.log('File received:', file);
 
         try {
+            // Initialize the Vision API client
             const client = new vision.ImageAnnotatorClient();
             const [result] = await client.textDetection(file.path);
             const detections = result.textAnnotations;
-            fileContent = detections.length ? detections[0].description : '';
+            fileContent = detections.length ? detections[0].description : 'No text detected';
             console.log('Extracted text from image:', fileContent);
         } catch (visionError) {
             console.error('Error processing Vision API:', visionError);
@@ -77,12 +80,14 @@ app.post('/api/chatgpt', (req, res, next) => {
     }
 
     try {
-        const messages = [{ role: "user", content: userMessage || ' ' }];
+        // Prepare messages array for OpenAI API
+        const messages = [{ role: "user", content: userMessage || ' ' }]; // Handle empty message scenario
 
         if (fileContent) {
             messages.push({ role: "user", content: `Here is the extracted text from the image: ${fileContent}` });
         }
 
+        // Call OpenAI API
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
@@ -111,7 +116,7 @@ app.post('/api/chatgpt', (req, res, next) => {
     } finally {
         if (file) {
             try {
-                fs.unlinkSync(file.path);  // Delete the file after processing
+                fs.unlinkSync(file.path);  // Delete the file from /tmp directory after processing
                 console.log('File deleted after processing');
             } catch (unlinkError) {
                 console.error('Error deleting the file:', unlinkError);
