@@ -10,7 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3002;
 
 // Define the path for the temporary Google Vision key file
-const keyFilePath = path.join('/tmp', 'vision-api-keyfile.json');
+const keyFilePath = path.join('/tmp', 'google-test-2.json');
 
 // Create a temporary keyfile with the Google Vision JSON credentials
 if (process.env.VISION_API_KEY_JSON) {
@@ -21,22 +21,20 @@ if (process.env.VISION_API_KEY_JSON) {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilePath; // Set the credentials environment variable
     } catch (err) {
         console.error('Error writing Google Vision API keyfile:', err);
-        process.exit(1);  // Exit if we can't write the keyfile
     }
 } else {
     console.error('Google Vision API credentials (JSON) are missing');
-    process.exit(1);  // Exit if we don't have the credentials
 }
 
-// Use the API key from the .env file for the Vision API URL
+// Set the Vision API URL using the API key
 let visionApiUrl;
 if (process.env.VISION_API_KEY) {
     visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
     console.log('Vision API URL set:', visionApiUrl);
 } else {
     console.error('Google Vision API Key is missing');
-    process.exit(1);  // Exit if we don't have the API key
 }
+
 
 // Use CORS middleware
 app.use(cors());
