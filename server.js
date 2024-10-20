@@ -15,7 +15,6 @@ const keyFilePath = path.join('/tmp', 'google-test-2.json');
 // Create a temporary keyfile with the Google Vision JSON credentials
 if (process.env.VISION_API_KEY_JSON) {
     try {
-        // Write the credentials to the /tmp directory on Vercel
         fs.writeFileSync(keyFilePath, process.env.VISION_API_KEY_JSON);
         console.log('Google Vision API keyfile written successfully');
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilePath; // Set the credentials environment variable
@@ -89,19 +88,24 @@ app.post('/api/chatgpt', (req, res, next) => {
                         },
                         features: [
                             {
-                                type: 'TEXT_DETECTION', // You can change this to other features like LABEL_DETECTION, etc.
+                                type: 'TEXT_DETECTION', // Specify what feature you want
                             },
                         ],
                     },
                 ],
             });
 
-            const detections = visionResponse.data.responses[0].textAnnotations;
-            fileContent = detections.length ? detections[0].description : 'No text detected';
+            if (visionResponse.status !== 200) {
+                console.error(`Vision API error: ${visionResponse.statusText}`);
+                return res.status(500).json({ error: 'Vision API error', details: visionResponse.statusText });
+            }
+
+            const detections = visionResponse.data.responses[0]?.textAnnotations;
+            fileContent = detections?.length ? detections[0].description : 'No text detected';
             console.log('Extracted text from image:', fileContent);
         } catch (visionError) {
-            console.error('Error processing Vision API:', visionError);
-            return res.status(500).json({ error: 'Error processing Vision API', details: visionError.message });
+            console.error('Error processing Vision API:', visionError.response?.data || visionError.message);
+            return res.status(500).json({ error: 'Error processing Vision API', details: visionError.response?.data || visionError.message });
         }
     }
 
