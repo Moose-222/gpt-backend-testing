@@ -8,6 +8,23 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// Create a temporary keyfile with the Google Vision JSON credentials
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    const keyFilePath = '/tmp/vision-api-keyfile.json';
+    try {
+        // Write the credentials to the /tmp directory on Vercel
+        fs.writeFileSync(keyFilePath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+        console.log('Google Vision API keyfile written successfully');
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilePath;
+    } catch (err) {
+        console.error('Error writing Google Vision API keyfile:', err);
+        process.exit(1);  // Exit if we can't write the keyfile
+    }
+} else {
+    console.error('Google Vision API credentials are missing');
+    process.exit(1);  // Exit if we don't have the credentials
+}
+
 // Use CORS middleware
 app.use(cors());
 app.use(express.json());
@@ -50,8 +67,7 @@ app.post('/api/chatgpt', (req, res, next) => {
             const imageBuffer = fs.readFileSync(file.path);
             const imageBase64 = imageBuffer.toString('base64');
 
-            const visionApiKey = process.env.VISION_API_KEY;  // Ensure you have this in your .env file
-            const visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${visionApiKey}`;
+            const visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
 
             // Make the request to Google Vision API using REST
             const visionResponse = await axios.post(visionApiUrl, {
