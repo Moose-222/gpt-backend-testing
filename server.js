@@ -97,7 +97,13 @@ app.post('/api/chatgpt', (req, res, next) => {
         if (fileContent) {
             messages.push({ role: "user", content: `Here is the extracted text from the image: ${fileContent}` });
         }
-    
+        
+        // Explicitly ask GPT-3 to derive insights for future use
+        messages.push({ 
+            role: "system", 
+            content: "Step 3: Based on this image and the extracted text, what insights and lessons can be learned that would be useful in similar scenarios or future use cases?" 
+        });
+
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
@@ -120,14 +126,12 @@ app.post('/api/chatgpt', (req, res, next) => {
         }
     
         // Add the logic for image analysis steps
-        const analysisSentences = botReply.split('. ');
-
-        const imageAnalysisStep1 = `Step 1: Highlighting main parts of the image. ${analysisSentences.length > 0 ? analysisSentences[0] : "Unable to detect main parts."}`;
-        const imageAnalysisStep2 = `Step 2: Summary of the image. ${analysisSentences.length > 1 ? analysisSentences.slice(1, 3).join('. ') : "No clear summary available."}`;
-        const imageAnalysisStep3 = `Step 3: Insights learned for future use from the image. ${analysisSentences.length > 3 ? analysisSentences.slice(3).join('. ') : "No insights derived from the image."}`;
+        const imageAnalysisStep1 = "Step 1: Highlighting main parts of the image.";
+        const imageAnalysisStep2 = "Step 2: Summary of the image.";
+        const imageAnalysisStep3 = "Step 3: " + botReply.split('###')[1]; // Use the insights GPT generates.
     
         // Combine bot reply with the image analysis steps
-        const formattedReply = `${botReply}`;
+        const formattedReply = `${botReply.split('###')[0]}###${imageAnalysisStep1}###${imageAnalysisStep2}###${imageAnalysisStep3}`;
         
         // Send the formatted reply with image analysis to the frontend
         res.json({ 
