@@ -3,6 +3,7 @@ const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
+const tesseract = require('tesseract.js');  // Add Tesseract for OCR
 require('dotenv').config();
 
 const app = express();
@@ -50,17 +51,13 @@ app.post('/api/chatgpt', (req, res, next) => {
         console.log('File received:', file);
 
         try {
-            // Read file content from /tmp
-            fileContent = fs.readFileSync(file.path, 'utf8');
-
-            // Truncate file content if it exceeds 1000 characters to prevent token overflow
-            if (fileContent.length > 1000) {
-                fileContent = fileContent.substring(0, 1000) + '... [truncated]';
-            }
-            console.log('File content:', fileContent);
-        } catch (readError) {
-            console.error('Error reading file:', readError);
-            return res.status(500).json({ error: 'Error reading the file', details: readError.message });
+            // Perform OCR if the file is an image
+            const ocrResult = await tesseract.recognize(file.path);
+            fileContent = ocrResult.data.text; // Extracted text from the image
+            console.log('Extracted text from image:', fileContent);
+        } catch (ocrError) {
+            console.error('Error processing OCR:', ocrError);
+            return res.status(500).json({ error: 'Error processing OCR', details: ocrError.message });
         }
     }
 
@@ -69,7 +66,7 @@ app.post('/api/chatgpt', (req, res, next) => {
         const messages = [{ role: "user", content: userMessage || ' ' }]; // Handle empty message scenario
 
         if (fileContent) {
-            messages.push({ role: "user", content: `Here is the file content: ${fileContent}` });
+            messages.push({ role: "user", content: `Here is the extracted text from the image: ${fileContent}` });
         }
 
         // Call OpenAI API
