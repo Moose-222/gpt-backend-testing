@@ -8,14 +8,8 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// Configure CORS: Allow requests only from your GoDaddy website
-const corsOptions = {
-    origin: 'https://websites.godaddy.com/en-GB/editor/a805d087-95be-4e04-bebb-802fe0f7ef49/4c2f63c9-6525-4b12-9880-303246223e1e/preview', // Replace with your GoDaddy frontend URL
-    methods: 'GET, POST',
-    allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
-app.use(cors(corsOptions)); // Apply CORS with options
+// Use CORS middleware
+app.use(cors());
 app.use(express.json());
 
 // Use /tmp directory for uploads on Vercel (only writeable directory)
@@ -58,6 +52,11 @@ app.post('/api/chatgpt', (req, res, next) => {
         try {
             // Read file content from /tmp
             fileContent = fs.readFileSync(file.path, 'utf8');
+
+            // Truncate file content if it exceeds 1000 characters to prevent token overflow
+            if (fileContent.length > 1000) {
+                fileContent = fileContent.substring(0, 1000) + '... [truncated]';
+            }
             console.log('File content:', fileContent);
         } catch (readError) {
             console.error('Error reading file:', readError);
