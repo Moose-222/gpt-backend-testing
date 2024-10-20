@@ -3,8 +3,13 @@ const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
-const tesseract = require('tesseract.js'); // Add Tesseract for OCR
+const vision = require('@google-cloud/vision'); // Import Google Cloud Vision
 require('dotenv').config();
+
+// Initialize the Google Cloud Vision client with credentials
+const client = new vision.ImageAnnotatorClient({
+    keyFilename: './your-google-vision-keyfile.json', // Path to your JSON key
+});
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -18,12 +23,6 @@ const upload = multer({
     dest: '/tmp',
     limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
 });
-
-// Set Tesseract worker options to ensure correct paths for WASM files
-tesseract.workerOptions = {
-    workerPath: '/node_modules/tesseract.js/dist/worker.min.js',
-    corePath: 'https://unpkg.com/tesseract.js-core/tesseract-core.wasm.js',
-};
 
 console.log("OpenAI API Key:", process.env.OPENAI_API_KEY);
 
@@ -57,13 +56,13 @@ app.post('/api/chatgpt', (req, res, next) => {
         console.log('File received:', file);
 
         try {
-            // Perform OCR on the file if it's an image
-            const ocrResult = await tesseract.recognize(file.path);
-            fileContent = ocrResult.data.text; // Extracted text from the image
-            console.log('Extracted text from image:', fileContent);
-        } catch (ocrError) {
-            console.error('Error processing OCR:', ocrError);
-            return res.status(500).json({ error: 'Error processing OCR', details: ocrError.message });
+            // Use Google Cloud Vision to perform OCR
+            const [result] = await client.textDetection(file.path);
+            fileContent = result.fullTextAnnotation ? result.fullTextAnnotation.text : '';
+            console.log('Extracted text from image using Vision API:', fileContent);
+        } catch (visionError) {
+            console.error('Error processing Vision API:', visionError);
+            return res.status(500).json({ error: 'Error processing Vision API', details: visionError.message });
         }
     }
 
