@@ -29,8 +29,9 @@ if (process.env.VISION_API_KEY_JSON) {
 }
 
 // Use the API key from the .env file for the Vision API URL
+let visionApiUrl;
 if (process.env.VISION_API_KEY) {
-    const visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
+    visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
     console.log('Vision API URL set:', visionApiUrl);
 } else {
     console.error('Google Vision API Key is missing');
@@ -76,10 +77,8 @@ app.post('/api/chatgpt', (req, res, next) => {
         console.log('File received:', file);
 
         try {
-            const imageBuffer = fs.readFileSync(file.path);
-            const imageBase64 = imageBuffer.toString('base64');
-
-            const visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
+            const imageBuffer = fs.readFileSync(file.path); // Read the image file
+            const imageBase64 = imageBuffer.toString('base64'); // Convert it to base64
 
             // Make the request to Google Vision API using REST
             const visionResponse = await axios.post(visionApiUrl, {
