@@ -3,13 +3,11 @@ const axios = require('axios');
 const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-
-const fs = require('fs');
-const path = require('path');
 
 // Define the path for the temporary Google Vision key file
 const keyFilePath = path.join('/tmp', 'vision-api-keyfile.json');
@@ -38,8 +36,6 @@ if (process.env.VISION_API_KEY) {
     console.error('Google Vision API Key is missing');
     process.exit(1);  // Exit if we don't have the API key
 }
-
-
 
 // Use CORS middleware
 app.use(cors());
