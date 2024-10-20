@@ -25,6 +25,7 @@ if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
     process.exit(1);  // Exit if we don't have the credentials
 }
 
+
 // Use CORS middleware
 app.use(cors());
 app.use(express.json());
