@@ -11,11 +11,21 @@ const PORT = process.env.PORT || 3002;
 
 // Create a temporary keyfile with the Google Vision JSON credentials
 if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    fs.writeFileSync('/tmp/vision-api-keyfile.json', process.env.GOOGLE_CREDENTIALS_JSON);
+    // Ensure the path and write the content to the correct file
+    const keyFilePath = '/tmp/vision-api-keyfile.json';
+    try {
+        fs.writeFileSync(keyFilePath, process.env.GOOGLE_CREDENTIALS_JSON);
+        console.log('Google Vision API keyfile written successfully');
+    } catch (err) {
+        console.error('Error writing Google Vision API keyfile:', err);
+        process.exit(1);  // Exit if we can't write the keyfile
+    }
+    // Set the GOOGLE_APPLICATION_CREDENTIALS environment variable to point to the keyfile
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilePath;
+} else {
+    console.error('Google Vision API credentials are missing');
+    process.exit(1);  // Exit if we don't have the credentials
 }
-
-// Set the path to the keyfile
-process.env.GOOGLE_APPLICATION_CREDENTIALS = '/tmp/vision-api-keyfile.json';
 
 // Use CORS middleware
 app.use(cors());
