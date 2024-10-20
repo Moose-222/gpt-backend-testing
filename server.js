@@ -19,7 +19,6 @@ if (process.env.VISION_API_KEY) {
     process.exit(1);  // Exit if we don't have the API key
 }
 
-
 // Use CORS middleware
 app.use(cors());
 app.use(express.json());
@@ -119,19 +118,24 @@ app.post('/api/chatgpt', (req, res, next) => {
             console.error('No valid response received from OpenAI');
             return res.status(500).json({ error: 'No valid response received from OpenAI' });
         }
-        
-        // Generate image analysis steps (these can be replaced with actual logic)
-        const imageAnalysisStep1 = "Image analysis step 1: Detected key elements of the diagram."; // Example placeholder
-        const imageAnalysisStep2 = "Image analysis step 2: Noticed patterns in the structure.";  // Example placeholder
-        const imageAnalysisStep3 = "Image analysis step 3: Analyzed key text and labels.";        // Example placeholder
-        
-        // Combine bot reply with image analysis steps, separating them with '###'
-        const formattedReply = `${botReply}###${imageAnalysisStep1}###${imageAnalysisStep2}###${imageAnalysisStep3}`;
-        
-        res.json({ reply: formattedReply });        
 
-        console.log('OpenAI reply:', reply);
-        res.json({ reply });
+        // Generate detailed image analysis summaries for step 1, 2, and 3
+        const analysisSentences = botReply.split('. ');
+
+        const imageAnalysisStep1 = `Main Parts Highlight: ${analysisSentences.length > 0 ? analysisSentences[0] : "Unable to detect main parts."}`;
+        const imageAnalysisStep2 = `Summary of Image: ${analysisSentences.length > 1 ? analysisSentences.slice(1, 3).join('. ') : "No clear summary available."}`;
+        const imageAnalysisStep3 = `Future Insights: ${analysisSentences.length > 3 ? analysisSentences.slice(3).join('. ') : "No insights derived from the image."}`;
+
+        // Structure reply with image analysis sections
+        res.json({
+            reply: botReply,
+            imageAnalysis: {
+                step1: imageAnalysisStep1,
+                step2: imageAnalysisStep2,
+                step3: imageAnalysisStep3
+            }
+        });
+
     } catch (error) {
         console.error('Error during OpenAI request:', error);
         res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
