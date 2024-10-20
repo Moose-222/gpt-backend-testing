@@ -141,9 +141,9 @@ app.post('/api/chatgpt', (req, res, next) => {
         // Generate more insightful content for the 3-step analysis
         const lines = botReply.split('\n').filter(line => line.trim().length > 0);
         
-        const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available';
-        const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available';
-        const step3Insights = 'Learnings for future use: Focus on better internal processes, enhancing customer interactions, and improving efficiency based on feedback from the image.';
+        const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available.';
+        const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available.';
+        const step3Insights = lines.length > 3 ? lines.slice(2).join(' ') : 'Learnings for future use: Focus on better internal processes, enhancing customer interactions, and improving efficiency based on feedback from the image.';
 
         // Combine the refined steps
         const formattedReply = `${botReply}`;
