@@ -8,8 +8,14 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// Use CORS middleware
-app.use(cors());
+// Configure CORS: Allow requests only from your GoDaddy website
+const corsOptions = {
+    origin: 'https://your-godaddy-site-url.com', // Replace with your GoDaddy frontend URL
+    methods: 'GET, POST',
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions)); // Apply CORS with options
 app.use(express.json());
 
 // Use /tmp directory for uploads on Vercel (only writeable directory)
