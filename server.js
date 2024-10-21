@@ -29,24 +29,6 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
 });
 
-// Function to query ChatGPT
-const askChatGPT = async (messageContent) => {
-    const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-            model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: messageContent }]
-        },
-        {
-            headers: {
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-        }
-    );
-    return response.data.choices[0]?.message?.content;
-};
-
 // Handle file upload and message in the request
 app.post('/api/chatgpt', (req, res, next) => {
     upload.single('file')(req, res, function (err) {
@@ -66,80 +48,148 @@ app.post('/api/chatgpt', (req, res, next) => {
     const userMessage = req.body.message;
     const file = req.file;
 
-    if (!userMessage && !file) {
-        console.log('Error: No message or file provided.');
-        return res.status(400).json({ error: 'Message or file is required' });
+    // Step 1: Handle the scenario where the user sends a simple message (e.g., "hi")
+    if (!file) {
+        // No file, handle normal text message
+        if (userMessage.toLowerCase().trim() === 'hi') {
+            const response = await axios.post(
+                'https://api.openai.com/v1/chat/completions',
+                {
+                    model: "gpt-3.5-turbo",
+                    messages: [{ role: "user", content: userMessage }]
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+            const botReply = response.data.choices[0]?.message?.content;
+            return res.json({ reply: botReply });
+        }
+
+        // If it's just a regular message, return a GPT response without any image analysis
+        const gptResponse = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: userMessage }]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        const reply = gptResponse.data.choices[0]?.message?.content;
+        return res.json({ reply, imageAnalysis: null });
     }
+
+    // Step 2: Image Handling - Start the analysis process for images
 
     let fileContent = '';
-    if (file) {
-        console.log('File received:', file);
+    try {
+        const imageBuffer = fs.readFileSync(file.path); // Read the image file
+        const imageBase64 = imageBuffer.toString('base64'); // Convert it to base64
 
-        try {
-            const imageBuffer = fs.readFileSync(file.path); // Read the image file
-            const imageBase64 = imageBuffer.toString('base64'); // Convert it to base64
-
-            // Make the request to Google Vision API using REST
-            const visionResponse = await axios.post(visionApiUrl, {
-                requests: [
-                    {
-                        image: {
-                            content: imageBase64,
-                        },
-                        features: [
-                            {
-                                type: 'TEXT_DETECTION', // Specify what feature you want
-                            },
-                        ],
+        // Make the request to Google Vision API using REST
+        const visionResponse = await axios.post(visionApiUrl, {
+            requests: [
+                {
+                    image: {
+                        content: imageBase64,
                     },
-                ],
-            });
+                    features: [
+                        {
+                            type: 'TEXT_DETECTION', // Specify what feature you want
+                        },
+                    ],
+                },
+            ],
+        });
 
-            if (visionResponse.status !== 200) {
-                console.error(`Vision API error: ${visionResponse.statusText}`);
-                return res.status(500).json({ error: 'Vision API error', details: visionResponse.statusText });
-            }
-
-            const detections = visionResponse.data.responses[0]?.textAnnotations;
-            fileContent = detections?.length ? detections[0].description : 'No text detected';
-            console.log('Extracted text from image:', fileContent);
-        } catch (visionError) {
-            console.error('Error processing Vision API:', visionError.response?.data || visionError.message);
-            return res.status(500).json({ error: 'Error processing Vision API', details: visionError.response?.data || visionError.message });
+        if (visionResponse.status !== 200) {
+            console.error(`Vision API error: ${visionResponse.statusText}`);
+            return res.status(500).json({ error: 'Vision API error', details: visionResponse.statusText });
         }
+
+        const detections = visionResponse.data.responses[0]?.textAnnotations;
+        fileContent = detections?.length ? detections[0].description : 'No text detected';
+        console.log('Extracted text from image:', fileContent);
+
+    } catch (visionError) {
+        console.error('Error processing Vision API:', visionError.response?.data || visionError.message);
+        return res.status(500).json({ error: 'Error processing Vision API', details: visionError.response?.data || visionError.message });
     }
 
+    // Step 3: Run the three separate GPT queries for Highlights, Summary, and Insights
+
     try {
-        // Step 1: Ask ChatGPT for 3 key highlights
-        const step1Query = `Please provide 3 key bullet-point highlights from the following image text: ${fileContent}`;
-        const step1Highlights = await askChatGPT(step1Query);
+        // Query for Highlights
+        const highlightResponse = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: `Please provide three bullet point highlights for this image text: ${fileContent}` }]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        const step1Highlights = highlightResponse.data.choices[0]?.message?.content || "Key highlights not available.";
 
-        // Step 2: Ask ChatGPT for a summary
-        const step2Query = `Please provide a concise one-paragraph summary from the following image text: ${fileContent}`;
-        const step2Summary = await askChatGPT(step2Query);
+        // Query for Summary
+        const summaryResponse = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: `Please provide a concise one-paragraph summary for this image text: ${fileContent}` }]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        const step2Summary = summaryResponse.data.choices[0]?.message?.content || "Summary not available.";
 
-        // Step 3: Ask ChatGPT for future opportunities
-        const step3Query = `Considering the image text, what future opportunities or process improvements could be derived from it?`;
-        const step3Insights = await askChatGPT(step3Query);
+        // Query for Insights
+        const insightsResponse = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: `Based on this image, what insights or opportunities for improvement can be drawn? ${fileContent}` }]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                }
+            }
+        );
+        const step3Insights = insightsResponse.data.choices[0]?.message?.content || "Learnings for future use not available.";
 
-        // Log results
-        console.log('Step 1 Highlights:', step1Highlights);
-        console.log('Step 2 Summary:', step2Summary);
-        console.log('Step 3 Insights:', step3Insights);
-
-        // Send the results back to the frontend
+        // Combine the refined steps
         res.json({
-            reply: step1Highlights + "\n" + step2Summary + "\n" + step3Insights,  // Main reply from GPT
+            reply: fileContent,  // Text extracted from the image
             imageAnalysis: {
-                step1: step1Highlights || "Key highlights not available.",
-                step2: step2Summary || "Summary not available.",
-                step3: step3Insights || "Learnings for future use not available."
+                step1: step1Highlights,
+                step2: step2Summary,
+                step3: step3Insights
             }
         });
 
+        console.log('Image Analysis Results:', { step1Highlights, step2Summary, step3Insights });
+
     } catch (error) {
-        console.error('Error during OpenAI request:', error);
-        return res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
+        console.error('Error during GPT requests:', error);
+        return res.status(500).json({ error: 'Something went wrong with the GPT request', details: error.message });
     } finally {
         if (file) {
             try {
