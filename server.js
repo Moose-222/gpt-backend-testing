@@ -139,34 +139,36 @@ app.post('/api/chatgpt', (req, res, next) => {
         }
 
         // Generate more insightful content for the 3-step analysis
-const lines = botReply.split('\n').filter(line => line.trim().length > 0);
+        const lines = botReply.split('\n').filter(line => line.trim().length > 0);
 
-const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available.';
-const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available.';
+        // Log how the lines are split for further debugging
+        console.log('Lines Parsed from Bot Reply:', lines);
 
-// Here, let's try to grab more relevant insights instead of using a static default.
-const step3Insights = lines.length > 5 ? lines.slice(3).join(' ') : 'Learnings for future use not available.';
+        const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available.';
+        const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available.';
 
-// Combine the refined steps
-const formattedReply = `${botReply}`;
+        // Here, let's try to grab more relevant insights instead of using a static default.
+        const step3Insights = lines.length > 5 ? lines.slice(3).join(' ') : 'Learnings for future use not available.';
 
-// Add the logging right before sending the response
-console.log('Formatted Reply:', formattedReply);
-console.log('Image Analysis:', { step1Highlights, step2Summary, step3Insights });
+        // Combine the refined steps
+        const formattedReply = `${botReply}`;
 
-// Send the formatted response with image analysis
-res.json({
-    reply: formattedReply,  // Main reply from GPT
-    imageAnalysis: {
-        step1: step1Highlights || "Key highlights not available.",
-        step2: step2Summary || "Summary not available.",
-        step3: step3Insights || "Learnings for future use not available."
-    }
-});
+        // Add the logging right before sending the response
+        console.log('Formatted Reply:', formattedReply);
+        console.log('Image Analysis:', { step1Highlights, step2Summary, step3Insights });
 
-        
+        // Send the formatted response with image analysis
+        res.json({
+            reply: formattedReply,  // Main reply from GPT
+            imageAnalysis: {
+                step1: step1Highlights || "Key highlights not available.",
+                step2: step2Summary || "Summary not available.",
+                step3: step3Insights || "Learnings for future use not available."
+            }
+        });
 
         console.log('OpenAI reply:', formattedReply);
+
     } catch (error) {
         console.error('Error during OpenAI request:', error);
         return res.status(500).json({ error: 'Something went wrong with the OpenAI request', details: error.message });
