@@ -29,6 +29,24 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
 });
 
+// Function to query ChatGPT
+const askChatGPT = async (messageContent) => {
+    const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: messageContent }]
+        },
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        }
+    );
+    return response.data.choices[0]?.message?.content;
+};
+
 // Handle file upload and message in the request
 app.post('/api/chatgpt', (req, res, next) => {
     upload.single('file')(req, res, function (err) {
@@ -47,25 +65,6 @@ app.post('/api/chatgpt', (req, res, next) => {
 
     const userMessage = req.body.message;
     const file = req.file;
-
-    // Step 1: Handle the scenario where the user sends a simple message (e.g., "hi")
-    if (!file && userMessage.toLowerCase().trim() === 'hi') {
-        const response = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: userMessage }]
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
-        const botReply = response.data.choices[0]?.message?.content;
-        return res.json({ reply: botReply });
-    }
 
     if (!userMessage && !file) {
         console.log('Error: No message or file provided.');
@@ -111,63 +110,32 @@ app.post('/api/chatgpt', (req, res, next) => {
     }
 
     try {
-        const messages = [{ role: "user", content: userMessage || ' ' }];
-    
-        if (fileContent) {
-            messages.push({ role: "user", content: `Please analyze this image and summarize it in a concise way: ${fileContent}` });
-        }
-    
-        const response = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-                model: "gpt-3.5-turbo",
-                messages: messages,
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
+        // Step 1: Ask ChatGPT for 3 key highlights
+        const step1Query = `Please provide 3 key bullet-point highlights from the following image text: ${fileContent}`;
+        const step1Highlights = await askChatGPT(step1Query);
 
-        const botReply = response.data.choices[0]?.message?.content;
+        // Step 2: Ask ChatGPT for a summary
+        const step2Query = `Please provide a concise one-paragraph summary from the following image text: ${fileContent}`;
+        const step2Summary = await askChatGPT(step2Query);
 
-        if (!botReply) {
-            console.error('No valid response received from OpenAI');
-            return res.status(500).json({ error: 'No valid response received from OpenAI' });
-        }
+        // Step 3: Ask ChatGPT for future opportunities
+        const step3Query = `Considering the image text, what future opportunities or process improvements could be derived from it?`;
+        const step3Insights = await askChatGPT(step3Query);
 
-        // Generate more insightful content for the 3-step analysis
-        const lines = botReply.split('\n').filter(line => line.trim().length > 0);
+        // Log results
+        console.log('Step 1 Highlights:', step1Highlights);
+        console.log('Step 2 Summary:', step2Summary);
+        console.log('Step 3 Insights:', step3Insights);
 
-        // Log how the lines are split for further debugging
-        console.log('Lines Parsed from Bot Reply:', lines);
-
-        const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available.';
-        const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available.';
-
-        // Here, let's try to grab more relevant insights instead of using a static default.
-        const step3Insights = lines.length > 5 ? lines.slice(3).join(' ') : 'Learnings for future use not available.';
-
-        // Combine the refined steps
-        const formattedReply = `${botReply}`;
-
-        // Add the logging right before sending the response
-        console.log('Formatted Reply:', formattedReply);
-        console.log('Image Analysis:', { step1Highlights, step2Summary, step3Insights });
-
-        // Send the formatted response with image analysis
+        // Send the results back to the frontend
         res.json({
-            reply: formattedReply,  // Main reply from GPT
+            reply: step1Highlights + "\n" + step2Summary + "\n" + step3Insights,  // Main reply from GPT
             imageAnalysis: {
                 step1: step1Highlights || "Key highlights not available.",
                 step2: step2Summary || "Summary not available.",
                 step3: step3Insights || "Learnings for future use not available."
             }
         });
-
-        console.log('OpenAI reply:', formattedReply);
 
     } catch (error) {
         console.error('Error during OpenAI request:', error);
