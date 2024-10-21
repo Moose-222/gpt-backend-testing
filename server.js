@@ -139,23 +139,31 @@ app.post('/api/chatgpt', (req, res, next) => {
         }
 
         // Generate more insightful content for the 3-step analysis
-        const lines = botReply.split('\n').filter(line => line.trim().length > 0);
-        
-        const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available.';
-        const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available.';
-        const step3Insights = lines.length > 3 ? lines.slice(2).join(' ') : 'Learnings for future use: Focus on better internal processes, enhancing customer interactions, and improving efficiency based on feedback from the image.';
+const lines = botReply.split('\n').filter(line => line.trim().length > 0);
 
-        // Combine the refined steps
-        const formattedReply = `${botReply}`;
+const step1Highlights = lines.length > 3 ? lines.slice(0, 3).join(' ') : 'Key highlights not available.';
+const step2Summary = lines.length > 3 ? `Summary: ${lines[0]}` : 'Summary not available.';
 
-        res.json({ 
-            reply: formattedReply,  // Main reply from GPT
-            imageAnalysis: {
-                step1: step1Highlights || "Key highlights not available.",
-                step2: step2Summary || "Summary not available.",
-                step3: step3Insights || "Learnings for future use not available."
-            }
-        });
+// Here, let's try to grab more relevant insights instead of using a static default.
+const step3Insights = lines.length > 5 ? lines.slice(3).join(' ') : 'Learnings for future use not available.';
+
+// Combine the refined steps
+const formattedReply = `${botReply}`;
+
+// Add the logging right before sending the response
+console.log('Formatted Reply:', formattedReply);
+console.log('Image Analysis:', { step1Highlights, step2Summary, step3Insights });
+
+// Send the formatted response with image analysis
+res.json({
+    reply: formattedReply,  // Main reply from GPT
+    imageAnalysis: {
+        step1: step1Highlights || "Key highlights not available.",
+        step2: step2Summary || "Summary not available.",
+        step3: step3Insights || "Learnings for future use not available."
+    }
+});
+
         
 
         console.log('OpenAI reply:', formattedReply);
