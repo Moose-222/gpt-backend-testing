@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // Set the Vision API URL using the API key
 let visionApiUrl = '';
@@ -26,43 +27,62 @@ app.use(express.json());
 // Configure Multer to use /tmp for file uploads on Vercel
 const upload = multer({
     dest: '/tmp',
-    limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
+    limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// New route to get a specific template based on document type
-app.get('/api/template/:type', (req, res) => {
+// Route to get a specific template based on document type
+app.get('/api/template/:type', async (req, res) => {
     const templateType = req.params.type;
     const templatePath = path.join(__dirname, 'templates', `${templateType}.json`);
 
-    // Check if the file exists
-    if (fs.existsSync(templatePath)) {
-        const template = fs.readFileSync(templatePath, 'utf-8');
-        res.json(JSON.parse(template));
-    } else {
-        res.status(404).json({ error: 'Template not found' });
+    try {
+        const templateData = await fs.promises.readFile(templatePath, 'utf-8');
+        res.json(JSON.parse(templateData));
+    } catch (error) {
+        console.error(`Error retrieving template: ${error.message}`);
+        res.status(404).json({ error: 'Template not found or could not be read.' });
     }
 });
 
-// New route to save modified template data
-app.post('/api/save_template/:type', (req, res) => {
+// Route to save modified template data
+app.post('/api/save_template/:type', async (req, res) => {
     const templateType = req.params.type;
     const modifiedData = req.body;
 
-    // Define a path to save modified templates
     const savePath = path.join(__dirname, 'modified_templates', `${templateType}_modified.json`);
 
-    // Save the modified template data to a file
-    fs.writeFile(savePath, JSON.stringify(modifiedData, null, 2), (err) => {
-        if (err) {
-            console.error('Error saving modified template:', err);
-            return res.status(500).json({ error: 'Failed to save template data' });
-        }
+    try {
+        await fs.promises.mkdir(path.join(__dirname, 'modified_templates'), { recursive: true });
+        await fs.promises.writeFile(savePath, JSON.stringify(modifiedData, null, 2), 'utf-8');
         console.log(`Modified template data saved successfully at ${savePath}`);
         res.json({ message: 'Template data saved successfully' });
-    });
+    } catch (err) {
+        console.error('Error saving modified template:', err);
+        res.status(500).json({ error: 'Failed to save template data' });
+    }
 });
 
-// Handle file upload and message in the request
+// DALL-E Image Generation Endpoint
+app.post('/api/generate-image', async (req, res) => {
+    const { prompt } = req.body;
+    if (!prompt) {
+        return res.status(400).json({ error: 'Prompt is required for image generation' });
+    }
+    try {
+        const response = await axios.post(
+            'https://api.openai.com/v1/images/generations',
+            { prompt, n: 1, size: '1024x1024' },
+            { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }
+        );
+        const imageUrl = response.data.data[0].url;
+        res.json({ imageUrl });
+    } catch (error) {
+        console.error('Error generating image with DALL-E:', error);
+        res.status(500).json({ error: 'Failed to generate image with DALL-E' });
+    }
+});
+
+// ChatGPT Analysis Endpoint
 app.post('/api/chatgpt', (req, res, next) => {
     upload.single('file')(req, res, function (err) {
         if (err instanceof multer.MulterError) {
@@ -81,66 +101,27 @@ app.post('/api/chatgpt', (req, res, next) => {
     const userMessage = req.body.message;
     const file = req.file;
 
-    // Step 1: Handle the scenario where the user sends a simple message (e.g., "hi")
+    // Step 1: Handle simple text message if no file uploaded
     if (!file) {
-        // No file, handle normal text message
-        if (userMessage.toLowerCase().trim() === 'hi') {
-            const response = await axios.post(
-                'https://api.openai.com/v1/chat/completions',
-                {
-                    model: "gpt-3.5-turbo",
-                    messages: [{ role: "user", content: userMessage }]
-                },
-                {
-                    headers: {
-                        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            );
-            const botReply = response.data.choices[0]?.message?.content;
-            return res.json({ reply: botReply });
-        }
-
-        // If it's just a regular message, return a GPT response without any image analysis
         const gptResponse = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
                 model: "gpt-3.5-turbo",
                 messages: [{ role: "user", content: userMessage }]
             },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                }
-            }
+            { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }
         );
         const reply = gptResponse.data.choices[0]?.message?.content;
         return res.json({ reply, imageAnalysis: null });
     }
 
-    // Step 2: Image Handling - Start the analysis process for images
-
+    // Step 2: Image Handling - Vision API for Text Detection
     let fileContent = '';
     try {
-        const imageBuffer = fs.readFileSync(file.path); // Read the image file
-        const imageBase64 = imageBuffer.toString('base64'); // Convert it to base64
-
-        // Make the request to Google Vision API using REST
+        const imageBuffer = fs.readFileSync(file.path);
+        const imageBase64 = imageBuffer.toString('base64');
         const visionResponse = await axios.post(visionApiUrl, {
-            requests: [
-                {
-                    image: {
-                        content: imageBase64,
-                    },
-                    features: [
-                        {
-                            type: 'TEXT_DETECTION', // Specify what feature you want
-                        },
-                    ],
-                },
-            ],
+            requests: [{ image: { content: imageBase64 }, features: [{ type: 'TEXT_DETECTION' }] }]
         });
 
         if (visionResponse.status !== 200) {
@@ -158,67 +139,32 @@ app.post('/api/chatgpt', (req, res, next) => {
     }
 
     // Step 3: Run the three separate GPT queries for Highlights, Summary, and Insights
-
     try {
-        // Query for Highlights
-        const highlightResponse = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
+        const [highlightsResponse, summaryResponse, insightsResponse] = await Promise.all([
+            axios.post('https://api.openai.com/v1/chat/completions', {
                 model: "gpt-3.5-turbo",
                 messages: [{ role: "user", content: `Please provide three bullet point highlights for this image text: ${fileContent}` }]
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                }
-            }
-        );
-        const step1Highlights = highlightResponse.data.choices[0]?.message?.content || "Key highlights not available.";
+            }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }),
 
-        // Query for Summary
-        const summaryResponse = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
+            axios.post('https://api.openai.com/v1/chat/completions', {
                 model: "gpt-3.5-turbo",
                 messages: [{ role: "user", content: `Please provide a concise one-paragraph summary for this image text: ${fileContent}` }]
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                }
-            }
-        );
-        const step2Summary = summaryResponse.data.choices[0]?.message?.content || "Summary not available.";
+            }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }),
 
-        // Query for Insights
-        const insightsResponse = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
+            axios.post('https://api.openai.com/v1/chat/completions', {
                 model: "gpt-3.5-turbo",
                 messages: [{ role: "user", content: `Based on this image, what insights or opportunities for improvement can be drawn? ${fileContent}` }]
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                }
-            }
-        );
+            }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } })
+        ]);
+
+        const step1Highlights = highlightsResponse.data.choices[0]?.message?.content || "Key highlights not available.";
+        const step2Summary = summaryResponse.data.choices[0]?.message?.content || "Summary not available.";
         const step3Insights = insightsResponse.data.choices[0]?.message?.content || "Learnings for future use not available.";
 
-        // Combine the refined steps
         res.json({
-            reply: fileContent,  // Text extracted from the image
-            imageAnalysis: {
-                step1: step1Highlights,
-                step2: step2Summary,
-                step3: step3Insights
-            }
+            reply: fileContent,
+            imageAnalysis: { step1: step1Highlights, step2: step2Summary, step3: step3Insights }
         });
-
-        console.log('Image Analysis Results:', { step1Highlights, step2Summary, step3Insights });
 
     } catch (error) {
         console.error('Error during GPT requests:', error);
@@ -226,7 +172,7 @@ app.post('/api/chatgpt', (req, res, next) => {
     } finally {
         if (file) {
             try {
-                fs.unlinkSync(file.path);  // Delete the file after processing
+                fs.unlinkSync(file.path);
                 console.log('File deleted after processing');
             } catch (unlinkError) {
                 console.error('Error deleting the file:', unlinkError);
@@ -235,6 +181,7 @@ app.post('/api/chatgpt', (req, res, next) => {
     }
 });
 
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
