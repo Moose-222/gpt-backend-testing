@@ -64,39 +64,30 @@ app.post('/api/save_template/:type', async (req, res) => {
 
 // DALL-E Image Generation Endpoint
 app.post('/api/generate-image', async (req, res) => {
-    const { prompt } = req.body;
-
+    const prompt = req.body.prompt;
     if (!prompt) {
-        return res.status(400).json({ error: 'Prompt is required' });
+      return res.status(400).json({ error: 'Prompt is required' });
     }
-
+  
     try {
-        const response = await axios.post(
-            'https://api.openai.com/v1/images/generations',
-            {
-                prompt: prompt,
-                n: 1,
-                size: "1024x1024"
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
-
-        const imageUrl = response.data.data[0]?.url;
-        if (imageUrl) {
-            res.json({ imageUrl });
-        } else {
-            res.status(500).json({ error: 'Image generation failed' });
+      const dalleResponse = await axios.post('https://api.openai.com/v1/images/generations', {
+        prompt,
+        n: 1,
+        size: '1024x1024'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
         }
+      });
+      
+      const imageUrl = dalleResponse.data.data[0].url;
+      res.json({ imageUrl });
     } catch (error) {
-        console.error("Error generating DALL-E image:", error);
-        res.status(500).json({ error: 'DALL-E image generation failed', details: error.message });
+      console.error('Error generating image:', error);
+      res.status(500).json({ error: 'Failed to generate image' });
     }
-});
+  });
+  
 
 
 
