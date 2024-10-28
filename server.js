@@ -29,6 +29,39 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // Set file size limit (10MB in this case)
 });
 
+// New route to get a specific template based on document type
+app.get('/api/template/:type', (req, res) => {
+    const templateType = req.params.type;
+    const templatePath = path.join(__dirname, 'templates', `${templateType}.json`);
+
+    // Check if the file exists
+    if (fs.existsSync(templatePath)) {
+        const template = fs.readFileSync(templatePath, 'utf-8');
+        res.json(JSON.parse(template));
+    } else {
+        res.status(404).json({ error: 'Template not found' });
+    }
+});
+
+// New route to save modified template data
+app.post('/api/save_template/:type', (req, res) => {
+    const templateType = req.params.type;
+    const modifiedData = req.body;
+
+    // Define a path to save modified templates
+    const savePath = path.join(__dirname, 'modified_templates', `${templateType}_modified.json`);
+
+    // Save the modified template data to a file
+    fs.writeFile(savePath, JSON.stringify(modifiedData, null, 2), (err) => {
+        if (err) {
+            console.error('Error saving modified template:', err);
+            return res.status(500).json({ error: 'Failed to save template data' });
+        }
+        console.log(`Modified template data saved successfully at ${savePath}`);
+        res.json({ message: 'Template data saved successfully' });
+    });
+});
+
 // Handle file upload and message in the request
 app.post('/api/chatgpt', (req, res, next) => {
     upload.single('file')(req, res, function (err) {
