@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Management Assistant</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* General Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #0d0d0d;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .main-container {
+            display: flex;
+            width: 90%;
+            height: 95vh;
+            background-color: #161616;
+            border-radius: 15px;
+            box-shadow: 0px 4px 20px rgba(0, 255, 255, 0.4);
+            overflow: hidden;
+        }
+
+        /* AI Assistant */
+        .ai-assistant-pane {
+            flex: 1;
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            gap: 15px;
+            border-right: 2px solid #00ffff;
+        }
+
+        .chat-log {
+            flex: 1;
+            overflow-y: auto;
+            border-radius: 10px;
+            background-color: #121212;
+            padding: 15px;
+        }
+
+        .message {
+            display: flex;
+            align-items: flex-start;
+            margin: 8px 0;
+        }
+
+        .message.you {
+            justify-content: flex-end;
+        }
+
+        .message .text {
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            background-color: #20232a;
+            color: #c0f0f0;
+            font-size: 0.9rem;
+        }
+
+        .message.you .text {
+            background-color: #00d9d9;
+            color: #000;
+        }
+
+        .chat-input {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-input textarea {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 20px;
+            background-color: #222;
+            color: #fff;
+            resize: none;
+            height: 40px;
+        }
+
+        .chat-input button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background-color: #00ffff;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* Right Pane */
+        .right-pane {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            background-color: #0d0d0d;
+        }
+
+        .nav-tabs {
+            display: flex;
+            justify-content: space-around;
+            background-color: #1a1a1a;
+            padding: 10px 0;
+            border-bottom: 2px solid #00ffff;
+        }
+
+        .nav-tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px 0;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #00ffff;
+            background-color: #1a1a1a;
+            transition: background-color 0.3s;
+        }
+
+        .nav-tab.active {
+            background-color: #00d9d9;
+            color: #000;
+        }
+
+        .content-section {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .template-controls select,
+        .template-controls button {
+            padding: 10px;
+            border: none;
+            border-radius: 10px;
+            background-color: #222;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        .template-controls button {
+            background-color: #00ffff;
+            color: #000;
+            cursor: pointer;
+        }
+
+        .template-preview {
+            background-color: #121212;
+            border: 1px solid #00ffff;
+            border-radius: 10px;
+            padding: 15px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            color: #c0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- AI Assistant Pane -->
+        <div class="ai-assistant-pane">
+            <h2>AI Assistant</h2>
+            <div class="chat-log" id="chat-log">
+                <!-- Chat messages will be appended here -->
+            </div>
+            <div class="chat-input">
+                <textarea id="message-input" placeholder="Type a message..."></textarea>
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <!-- Right Pane -->
+        <div class="right-pane">
+            <div class="nav-tabs">
+                <div class="nav-tab active" onclick="showSection('templates')">Templates</div>
+                <div class="nav-tab" onclick="showSection('gantt-chart')">Gantt Chart</div>
+            </div>
+            <div id="templates" class="content-section active">
+                <h2>Template Selection</h2>
+                <div class="template-controls">
+                    <select id="template-selector" onchange="loadTemplate()">
+                        <option value="">-- Select a Template --</option>
+                        <option value="project_charter">Project Charter</option>
+                        <option value="risk_assessment">Risk Assessment</option>
+                        <option value="work_breakdown_structure">Work Breakdown Structure</option>
+                    </select>
+                    <button onclick="downloadExcel()">Download as Excel</button>
+                </div>
+                <div class="template-preview" id="template-preview">
+                    Template content will appear here...
+                </div>
+            </div>
+            <div id="gantt-chart" class="content-section">
+                <h2>Gantt Chart</h2>
+                <div class="template-preview" id="gantt-chart-preview">
+                    Gantt Chart preview will appear here...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showSection(sectionId) {
+            const tabs = document.querySelectorAll('.nav-tab');
+            const sections = document.querySelectorAll('.content-section');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            sections.forEach(section => section.classList.remove('active'));
+
+            document.querySelector(`.nav-tab[onclick="showSection('${sectionId}')"]`).classList.add('active');
+            document.getElementById(sectionId).classList.add('active');
+        }
+
+        async function sendMessage() {
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value.trim();
+            if (!message) return alert('Please enter a message.');
+
+            appendMessage('you', message);
+
+            try {
+                const response = await fetch('/api/chatgpt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                const data = await response.json();
+                appendMessage('AI', data.reply);
+            } catch (error) {
+                appendMessage('AI', 'Error processing your request.');
+                console.error(error);
+            }
+
+            messageInput.value = '';
+        }
+
+        function appendMessage(sender, text) {
+            const chatLog = document.getElementById('chat-log');
+            const message = document.createElement('div');
+            message.className = `message ${sender}`;
+            message.innerHTML = `<div class="text">${text}</div>`;
+            chatLog.appendChild(message);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        async function loadTemplate() {
+            const selected = document.getElementById('template-selector').value;
+            try {
+                const response = await fetch(`/api/template/${selected}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch template: ${response.statusText}`);
+                }
+                const data = await response.json();
+                const preview = document.getElementById('template-preview');
+                preview.textContent = data.template || "Template content not available.";
+            } catch (error) {
+                console.error(error);
+                document.getElementById('template-preview').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function downloadExcel() {
+            const content = document.getElementById('template-preview').textContent.trim();
+            if (!content) return alert('No content to download!');
+
+            const rows = content.split('\n').map(row => [row]);
+            const worksheet = XLSX.utils.aoa_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+            XLSX.writeFile(workbook, "template.xlsx");
+        }
+    </script>
+</body>
+</html>

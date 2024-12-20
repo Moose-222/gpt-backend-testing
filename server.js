@@ -9,42 +9,125 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3002;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const VISION_API_KEY = process.env.VISION_API_KEY;
 
-// Set the Vision API URL using the API key
+// --- API URL Setup ---
 let visionApiUrl = '';
-if (process.env.VISION_API_KEY) {
-    visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${process.env.VISION_API_KEY}`;
-    console.log('Vision API URL set:', visionApiUrl);
+if (VISION_API_KEY) {
+    visionApiUrl = `https://vision.googleapis.com/v1/images:annotate?key=${VISION_API_KEY}`;
+    console.log('✅ Vision API URL configured');
 } else {
-    console.error('Google Vision API Key is missing');
-    process.exit(1);  // Exit if we don't have the API key
+    console.error('❌ Google Vision API Key is missing');
+    process.exit(1);
 }
 
-// Use CORS middleware
-app.use(cors());
+// --- Middleware ---
+app.use(cors({
+    origin: 'http://localhost:3000', // Update with your frontend URL
+    methods: ['GET', 'POST']
+}));
 app.use(express.json());
 
-// Configure Multer to use /tmp for file uploads on Vercel
-const upload = multer({
-    dest: '/tmp',
-    limits: { fileSize: 10 * 1024 * 1024 },
+// --- Multer for File Uploads ---
+const upload = multer({ dest: '/tmp', limits: { fileSize: 10 * 1024 * 1024 } });
+
+// --- Health Check Route ---
+app.get('/', (req, res) => {
+    res.send('✅ Backend is running successfully!');
 });
 
-// Route to get a specific template based on document type
-app.get('/api/template/:type', async (req, res) => {
-    const templateType = req.params.type;
-    const templatePath = path.join(__dirname, 'templates', `${templateType}.json`);
+// --- ChatGPT Endpoint ---
+app.post('/api/chatgpt', upload.single('file'), async (req, res) => {
+    const userMessage = req.body.message;
+    const file = req.file;
+    let fileContent = '';
+
+    if (!userMessage && !file) {
+        return res.status(400).json({ error: 'Either "message" or an uploaded file is required.' });
+    }
 
     try {
-        const templateData = await fs.promises.readFile(templatePath, 'utf-8');
-        res.json(JSON.parse(templateData));
+        // Handle Vision API for Image Uploads
+        if (file) {
+            console.log('📂 Processing uploaded file...');
+            const imageBuffer = fs.readFileSync(file.path);
+            const imageBase64 = imageBuffer.toString('base64');
+
+            const visionResponse = await axios.post(visionApiUrl, {
+                requests: [{ image: { content: imageBase64 }, features: [{ type: 'TEXT_DETECTION' }] }]
+            });
+
+            fs.unlinkSync(file.path); // Delete temporary file
+            fileContent = visionResponse.data.responses[0]?.textAnnotations?.[0]?.description || 'No text detected';
+            console.log('✅ Vision API Response:', fileContent);
+        }
+
+        // Combine User Message and File Content
+        const combinedInput = file ? `Extracted Image Text: ${fileContent}\nUser Input: ${userMessage || ''}` : userMessage;
+
+        // Send Prompt to GPT-3.5
+        const gptResponse = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: 'gpt-3.5-turbo',
+                messages: [{ role: 'user', content: combinedInput }]
+            },
+            { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }
+        );
+
+        const reply = gptResponse.data.choices[0]?.message?.content || 'No response from GPT.';
+        console.log('🧠 GPT Response:', reply);
+
+        res.json({ reply });
     } catch (error) {
-        console.error(`Error retrieving template: ${error.message}`);
-        res.status(404).json({ error: 'Template not found or could not be read.' });
+        console.error('❌ Error processing ChatGPT request:', error.message);
+        res.status(500).json({ error: 'Failed to process request', details: error.message });
     }
 });
 
-// Route to save modified template data
+// --- DALL·E Image Generation Endpoint ---
+app.post('/api/generate-image', async (req, res) => {
+    const prompt = req.body.prompt;
+    if (!prompt) return res.status(400).json({ error: 'A "prompt" field is required.' });
+
+    try {
+        const dalleResponse = await axios.post(
+            'https://api.openai.com/v1/images/generations',
+            { prompt, n: 1, size: '1024x1024' },
+            { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` } }
+        );
+
+        const imageUrl = dalleResponse.data.data[0]?.url;
+        console.log('🎨 DALL·E Image Generated:', imageUrl);
+        res.json({ imageUrl });
+    } catch (error) {
+        console.error('❌ DALL·E Error:', error.message);
+        res.status(500).json({ error: 'Failed to generate image', details: error.message });
+    }
+});
+
+// Template Fetching Endpoint
+app.get('/api/template/:type', (req, res) => {
+    const { type } = req.params;
+    const templatePath = path.join(TEMPLATES_DIR, `${type}.json`);
+
+    fs.readFile(templatePath, 'utf8', (err, data) => {
+        if (err) {
+            console.error(`Error fetching template "${type}":`, err.message);
+            return res.status(404).json({ error: `Template "${type}" not found.` });
+        }
+
+        try {
+            const template = JSON.parse(data);
+            res.json({ template });
+        } catch (parseError) {
+            console.error('Error parsing template JSON:', parseError.message);
+            res.status(500).json({ error: 'Error reading template file.' });
+        }
+    });
+});
+
+// --- Save Modified Template Endpoint ---
 app.post('/api/save_template/:type', async (req, res) => {
     const templateType = req.params.type;
     const modifiedData = req.body;
@@ -53,144 +136,61 @@ app.post('/api/save_template/:type', async (req, res) => {
 
     try {
         await fs.promises.mkdir(path.join(__dirname, 'modified_templates'), { recursive: true });
-        await fs.promises.writeFile(savePath, JSON.stringify(modifiedData, null, 2), 'utf-8');
-        console.log(`Modified template data saved successfully at ${savePath}`);
-        res.json({ message: 'Template data saved successfully' });
-    } catch (err) {
-        console.error('Error saving modified template:', err);
+        await fs.promises.writeFile(savePath, JSON.stringify(modifiedData, null, 2));
+        console.log('✅ Template saved successfully at:', savePath);
+        res.json({ message: 'Template saved successfully!' });
+    } catch (error) {
+        console.error('❌ Save Template Error:', error.message);
         res.status(500).json({ error: 'Failed to save template data' });
     }
 });
 
-// DALL-E Image Generation Endpoint
-app.post('/api/generate-image', async (req, res) => {
-    const prompt = req.body.prompt;
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
+// Endpoint to generate Gantt Chart data
+app.post('/api/gantt-data', (req, res) => {
+    const { content } = req.body;
+
+    if (!content) {
+        return res.status(400).json({ error: 'Template content is required.' });
     }
-  
+
     try {
-      const dalleResponse = await axios.post('https://api.openai.com/v1/images/generations', {
-        prompt,
-        n: 1,
-        size: '1024x1024'
-      }, {
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-        }
-      });
-      
-      const imageUrl = dalleResponse.data.data[0].url;
-      res.json({ imageUrl });
-    } catch (error) {
-      console.error('Error generating image:', error);
-      res.status(500).json({ error: 'Failed to generate image' });
-    }
-  });
-  
+        // Parse the template content into Gantt data
+        const lines = content.split('\n').filter(line => line.trim() !== '');
+        const ganttData = [];
+        let milestoneId = 1;
 
-
-
-// ChatGPT Analysis Endpoint
-app.post('/api/chatgpt', (req, res, next) => {
-    upload.single('file')(req, res, function (err) {
-        if (err instanceof multer.MulterError) {
-            console.error('Multer Error:', err.message);
-            return res.status(400).json({ error: err.message });
-        } else if (err) {
-            console.error('File upload error:', err.message);
-            return res.status(500).json({ error: 'File upload error', details: err.message });
-        }
-        next();
-    });
-}, async (req, res) => {
-    console.log('Received request body:', req.body);
-    console.log('Received file:', req.file ? req.file.originalname : 'No file uploaded');
-
-    const userMessage = req.body.message;
-    const file = req.file;
-
-    // Step 1: Handle simple text message if no file uploaded
-    if (!file) {
-        const gptResponse = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: userMessage }]
-            },
-            { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }
-        );
-        const reply = gptResponse.data.choices[0]?.message?.content;
-        return res.json({ reply, imageAnalysis: null });
-    }
-
-    // Step 2: Image Handling - Vision API for Text Detection
-    let fileContent = '';
-    try {
-        const imageBuffer = fs.readFileSync(file.path);
-        const imageBase64 = imageBuffer.toString('base64');
-        const visionResponse = await axios.post(visionApiUrl, {
-            requests: [{ image: { content: imageBase64 }, features: [{ type: 'TEXT_DETECTION' }] }]
-        });
-
-        if (visionResponse.status !== 200) {
-            console.error(`Vision API error: ${visionResponse.statusText}`);
-            return res.status(500).json({ error: 'Vision API error', details: visionResponse.statusText });
-        }
-
-        const detections = visionResponse.data.responses[0]?.textAnnotations;
-        fileContent = detections?.length ? detections[0].description : 'No text detected';
-        console.log('Extracted text from image:', fileContent);
-
-    } catch (visionError) {
-        console.error('Error processing Vision API:', visionError.response?.data || visionError.message);
-        return res.status(500).json({ error: 'Error processing Vision API', details: visionError.response?.data || visionError.message });
-    }
-
-    // Step 3: Run the three separate GPT queries for Highlights, Summary, and Insights
-    try {
-        const [highlightsResponse, summaryResponse, insightsResponse] = await Promise.all([
-            axios.post('https://api.openai.com/v1/chat/completions', {
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: `Please provide three bullet point highlights for this image text: ${fileContent}` }]
-            }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }),
-
-            axios.post('https://api.openai.com/v1/chat/completions', {
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: `Please provide a concise one-paragraph summary for this image text: ${fileContent}` }]
-            }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } }),
-
-            axios.post('https://api.openai.com/v1/chat/completions', {
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: `Based on this image, what insights or opportunities for improvement can be drawn? ${fileContent}` }]
-            }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' } })
-        ]);
-
-        const step1Highlights = highlightsResponse.data.choices[0]?.message?.content || "Key highlights not available.";
-        const step2Summary = summaryResponse.data.choices[0]?.message?.content || "Summary not available.";
-        const step3Insights = insightsResponse.data.choices[0]?.message?.content || "Learnings for future use not available.";
-
-        res.json({
-            reply: fileContent,
-            imageAnalysis: { step1: step1Highlights, step2: step2Summary, step3: step3Insights }
-        });
-
-    } catch (error) {
-        console.error('Error during GPT requests:', error);
-        return res.status(500).json({ error: 'Something went wrong with the GPT request', details: error.message });
-    } finally {
-        if (file) {
-            try {
-                fs.unlinkSync(file.path);
-                console.log('File deleted after processing');
-            } catch (unlinkError) {
-                console.error('Error deleting the file:', unlinkError);
+        lines.forEach(line => {
+            // Detect milestones and tasks based on indentation
+            if (line.startsWith('1.') || line.startsWith('2.') || line.startsWith('3.')) {
+                // Milestone
+                ganttData.push({
+                    id: milestoneId,
+                    task: line.trim(),
+                    start_date: new Date().toISOString().split('T')[0], // Placeholder for start date
+                    end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Placeholder for end date
+                });
+                milestoneId++;
+            } else if (line.startsWith('-')) {
+                // Task under a milestone
+                ganttData.push({
+                    id: milestoneId,
+                    task: line.trim().replace('-', '').trim(),
+                    start_date: new Date().toISOString().split('T')[0], // Placeholder for start date
+                    end_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Placeholder for end date
+                    parent_id: milestoneId - 1 // Relate to the previous milestone
+                });
             }
-        }
+        });
+
+        res.json(ganttData);
+    } catch (error) {
+        console.error('Error generating Gantt data:', error);
+        res.status(500).json({ error: 'Failed to generate Gantt chart data.' });
     }
 });
 
-// Start the server
+
+// --- Start Server ---
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
